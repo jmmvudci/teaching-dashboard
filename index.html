@@ -2682,7 +2682,7 @@ const EMBEDDED_JCMA=[];
 const PAPER_SHEET_ID = '1iugYLWg9nRCSrVIO78bV0Ni4fMSYfMfHh0Jiqh9TbhU';
 const JCMA_FILE_ID   = '1VQDf1kHFk2-IJQVj3pN7IpfegmNixjWk';
 // Google Sheets 公開 CSV 端點（不需登入、不受 CORS 限制）
-const PAPER_CSV_URL  = 'https://docs.google.com/spreadsheets/d/'+(PAPER_SHEET_ID)+'/export?format=csv&gid=365173910';
+const PAPER_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR1SNQa7xsP32mFrCzVc-TffOHPjQNcMSZIba2uCJ83Qy5kYUZNN1jHzUxybqTVjD3wo7vccC2xe77z/pub?output=csv';
 
 let APPS_SCRIPT_URL = '';
 try{ APPS_SCRIPT_URL = localStorage.getItem('prd_script_url') || ''; }catch(e){}
@@ -3472,7 +3472,47 @@ async function clearLocalStorage(){
   showToast('🗑️ 本機儲存已全部清除');
 }
 
-function rebuildAndDownload(){
+function rebuildIndexHtml(){
+  if(!S.rawRows.length){ alert('請先上傳論文資料'); return; }
+  showToast('⏳ 產生新版 index.html 中...');
+  setTimeout(()=>{
+    try{
+      const src = document.documentElement.outerHTML;
+      const paperSlim = S.rawRows.map(r=>({
+        emp_id:r.emp_id||'',name:r.name||'',dept:r.dept||'',
+        journal:r.journal||'',title:r.title||'',
+        paper_type_raw:r.paper_type_raw||'',is_sci:!!r.is_sci,
+        role:r.role||'',author_type:r.author_type||'',src:r.src||'system'
+      }));
+      let newHtml = src.replace(
+        /\nconst EMBEDDED=\[[\s\S]*?\](?=;\n)/,
+        '\nconst EMBEDDED='+JSON.stringify(paperSlim)
+      );
+      const specialSlim = S.specialList.map(r=>({
+        emp_id:r.emp_id||'',name:r.name||'',dept:r.dept||'',docType:r.docType||'西醫師',
+        journal:r.journal||'',title:r.title||'',is_sci:!!r.is_sci,
+        paper_type_raw:r.paper_type_raw||'',src:'special'
+      }));
+      newHtml = newHtml.replace(
+        /const EMBEDDED_SPECIAL=\[[\s\S]*?\];/,
+        'const EMBEDDED_SPECIAL='+JSON.stringify(specialSlim)+';'
+      );
+      newHtml = newHtml.replace(
+        /const EMBEDDED_JCMA=\[[\s\S]*?\];/,
+        'const EMBEDDED_JCMA='+JSON.stringify([...S.jcmaJournals])+';'
+      );
+      const blob = new Blob([newHtml], {type:'text/html;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href=url; a.download='index.html';
+      a.click(); URL.revokeObjectURL(url);
+      showToast('✅ 下載完成！上傳到 GitHub 後網站自動更新');
+    }catch(e){ alert('產生失敗：'+e.message); }
+  }, 100);
+}
+function rebuildAndDownload(){ rebuildIndexHtml(); }
+
+function _oldRebuildAndDownload(){
   if(!S.rawRows.length){ alert('請先上傳論文資料'); return; }
   showToast('⏳ 產生新版 HTML 中...');
   setTimeout(()=>{
@@ -3646,12 +3686,7 @@ async function startup(){
     S.computed={eligible,published:eligible.filter(e=>e.validPaper).length,byType,deptMap:{}};
   }catch(e){ console.warn('physician init error', e); }
 
-  // 頁面載入後自動從 GDrive 讀取最新資料並更新首頁統計
-  setTimeout(async ()=>{
-    try{
-      await autoLoadFromGDrive();
-    }catch(e){ console.warn('auto GDrive load error', e); }
-  }, 1500);
+  // 資料已嵌入 HTML，不需要從外部讀取
 
   return {
     id: 'physician-paper',
@@ -4103,16 +4138,7 @@ buildHome();
 <div class="page-panel" id="page-upload">
   <div class="sec-h"><h2>上傳資料</h2><p>論文資料、特殊發表名單、期刊清單</p></div>
 
-  <!-- Google Drive 自動讀取狀態 -->
-  <div style="display:flex;align-items:center;gap:10px;background:rgba(30,136,229,.1);border:1px solid rgba(30,136,229,.3);border-radius:10px;padding:10px 14px;margin-bottom:12px">
-    <span style="font-size:20px">☁️</span>
-    <div style="flex:1">
-      <div style="font-size:12px;font-weight:600;color:var(--sky)">Google Drive 自動讀取</div>
-      <div style="font-size:11px;color:var(--gray3)" id="gdriveStatus">等待初始化...</div>
-    </div>
-    <button class="btn btn-g" style="font-size:11px;padding:5px 12px" onclick="autoLoadFromGDrive()">🔄 重新讀取</button>
-    <button class="btn btn-g" style="font-size:11px;padding:5px 12px" onclick="document.getElementById('scriptUrlModal').style.display='flex'">⚙️ 設定</button>
-  </div>
+
 
   <!-- Apps Script URL 設定 Modal -->
   <div id="scriptUrlModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;align-items:center;justify-content:center">
@@ -4185,9 +4211,11 @@ buildHome();
   <div class="log-box" id="logEl"></div>
   <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
     <button class="btn btn-p" onclick="recalc()">🔄 重新計算發表率</button>
-    <button class="btn btn-p" style="background:linear-gradient(135deg,#2e7d32,#43a047);border-color:#2e7d32" onclick="rebuildAndDownload()" title="將所有資料嵌入 HTML，下載後直接開啟即有完整資料">💾 產生新版 HTML（儲存資料）</button>
+    <button class="btn btn-p" style="background:linear-gradient(135deg,#2e7d32,#43a047);border-color:#2e7d32" onclick="rebuildIndexHtml()" title="將論文資料嵌入整合版儀表板並下載">💾 產生新版 index.html（更新網站）</button>
     <button class="btn btn-g" onclick="clearAll()">🗑️ 清除論文與特殊名單</button>
-    <button class="btn btn-g" onclick="diagStorage()" title="診斷儲存狀態">🔍 診斷</button>
+  </div>
+  <div class="ab warn" style="margin-top:10px;font-size:11.5px">
+    💡 上傳論文資料後，點「💾 產生新版 index.html」下載，再上傳到 GitHub，網站自動更新。
   </div>
 </div>
 
@@ -4367,7 +4395,7 @@ const EMBEDDED_JCMA=[];
 const PAPER_SHEET_ID = '1iugYLWg9nRCSrVIO78bV0Ni4fMSYfMfHh0Jiqh9TbhU';
 const JCMA_FILE_ID   = '1VQDf1kHFk2-IJQVj3pN7IpfegmNixjWk';
 // Google Sheets 公開 CSV 端點（不需登入、不受 CORS 限制）
-const PAPER_CSV_URL  = 'https://docs.google.com/spreadsheets/d/'+(PAPER_SHEET_ID)+'/export?format=csv&gid=365173910';
+const PAPER_CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR1SNQa7xsP32mFrCzVc-TffOHPjQNcMSZIba2uCJ83Qy5kYUZNN1jHzUxybqTVjD3wo7vccC2xe77z/pub?output=csv';
 
 let APPS_SCRIPT_URL = '';
 try{ APPS_SCRIPT_URL = localStorage.getItem('prd_script_url') || ''; }catch(e){}
