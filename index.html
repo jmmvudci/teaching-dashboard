@@ -3702,14 +3702,8 @@ async function startup(){
       wrapper.appendChild(document.importNode(tpl.content, true));
       container.innerHTML = '';
       container.appendChild(wrapper);
-      // 初始化論文系統（DOM 已就緒，可以安全 recalc）
-      if (!_mounted) {
-        _mounted = true;
-        // 資料已在 IIFE init 時載入，直接 recalc 渲染 DOM
-        setTimeout(()=>{ recalc(); autoLoadFromGDrive(); }, 100);
-      } else {
-        recalc();
-      }
+      // DOM 已就緒，先用現有資料渲染，同時重新從 GDrive 載入最新
+      setTimeout(()=>{ recalc(); autoLoadFromGDrive(); }, 100);
     }
   };
 })();
