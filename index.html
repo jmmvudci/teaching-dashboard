@@ -2740,6 +2740,8 @@ async function autoLoadFromGDrive(){
     setS('✅ 論文已載入 '+(S.rawRows.length)+' 筆', true);
     recalc();
     showToast('✅ 資料已自動載入（'+(S.rawRows.length)+' 筆）');
+    // 更新主系統首頁統計
+    if(typeof renderHomeStats === 'function') renderHomeStats();
   }catch(e){
     setS('❌ 論文讀取失敗：'+(e.message), false);
     console.error('GSheets paper error:', e);
@@ -3646,6 +3648,13 @@ async function startup(){
     S.computed={eligible,published:eligible.filter(e=>e.validPaper).length,byType,deptMap:{}};
   }catch(e){ console.warn('physician init error', e); }
 
+  // 頁面載入後自動從 GDrive 讀取最新資料並更新首頁統計
+  setTimeout(async ()=>{
+    try{
+      await autoLoadFromGDrive();
+    }catch(e){ console.warn('auto GDrive load error', e); }
+  }, 1500);
+
   return {
     id: 'physician-paper',
     ns: 'physician-paper',
@@ -3826,7 +3835,9 @@ function buildRail() {
 function buildHome() {
   renderHomeStats();
   // 論文資料初始化後重新渲染首頁統計
-  setTimeout(()=>renderHomeStats(), 200);
+  // Re-render home stats after GDrive data loads
+setTimeout(()=>renderHomeStats(), 3000);
+setTimeout(()=>renderHomeStats(), 6000);
   const liveSystems = SYSTEMS.filter(s=>s.status==='live');
   document.getElementById('sys-count').textContent = `${SYSTEMS.length}（${liveSystems.length} 套運作中）`;
   document.getElementById('last-update').textContent = liveSystems.map(s=>s.lastUpdated).sort().pop()||'—';
@@ -4422,6 +4433,8 @@ async function autoLoadFromGDrive(){
     setS('✅ 論文已載入 '+(S.rawRows.length)+' 筆', true);
     recalc();
     showToast('✅ 資料已自動載入（'+(S.rawRows.length)+' 筆）');
+    // 更新主系統首頁統計
+    if(typeof renderHomeStats === 'function') renderHomeStats();
   }catch(e){
     setS('❌ 論文讀取失敗：'+(e.message), false);
     console.error('GSheets paper error:', e);
