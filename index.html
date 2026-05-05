@@ -2725,14 +2725,12 @@ async function autoLoadFromGDrive(){
   // Apps Script URL（固定）
   const scriptUrl = 'https://script.google.com/macros/s/AKfycbw-fSZ3AlGiDEPqsZfrhZxxDhDJ_QwygLXHU90GmVIKeDuzHKu1Pmig8Nd30DEMbAjkXw/exec';
 
-  // ── 論文資料 ──
+  // ── 論文資料：直接從 Google Sheets CSV 讀取（gid=365173910）──
   try{
     let rows = [];
-    const resp = await fetch((scriptUrl)+'?type=paper');
-    if(!resp.ok) throw new Error('HTTP '+(resp.status));
-    const data = await resp.json();
-    if(data.error) throw new Error(data.error);
-    rows = data.rows || [];
+    const csvResp = await fetch(PAPER_CSV_URL);
+    if(!csvResp.ok) throw new Error('HTTP '+(csvResp.status));
+    rows = csvToRows(await csvResp.text());
     if(!rows.length) throw new Error('試算表無資料');
     parseExcelRows(rows);
     S._uploadedPapers = true;
