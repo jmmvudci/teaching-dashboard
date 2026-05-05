@@ -3617,8 +3617,34 @@ async function startup(){
 }
 
 
-  // ── 初始化嵌入資料（讓 summary() 在 mount 前就有資料）──
-  try{ loadEmbedded(); }catch(e){ console.warn('physician init error', e); }
+  // ── 初始化嵌入資料（讓 summary() 在 mount 前就有資料，不操作 DOM）──
+  try{
+    S.rawRows = EMBEDDED.map(r=>{
+      const {dept,docType,isResigned,title} = resolveDoc(r.emp_id, r.dept);
+      return {...r, dept, docType, isResigned, staffTitle:title};
+    });
+    // 只計算 S.computed，不渲染 DOM
+    const allPapers = [...S.rawRows.filter(r=>r.role==='醫師'||!r.role)];
+    const paperByDoc = {};
+    allPapers.forEach(row=>{
+      const key = row.emp_id || row.name;
+      if(!paperByDoc[key]) paperByDoc[key]={key,name:row.name,dept:row.dept,docType:row.docType,emp_id:row.emp_id,papers:[]};
+      paperByDoc[key].papers.push(row);
+    });
+    const byType={'西醫師':{denom:0,pub:0},'牙醫師':{denom:0,pub:0},'中醫師':{denom:0,pub:0}};
+    const eligible=[];
+    Object.values(STAFF_MAP).forEach(staff=>{
+      const key=staff.emp_id||staff.name;
+      const pd=paperByDoc[key];
+      const hasValid=pd&&pd.papers.some(p=>p.is_sci||isJCMA(p.journal));
+      const inDenom=!staff.isResigned||hasValid;
+      if(!inDenom)return;
+      const dt=staff.docType||'西醫師';
+      if(byType[dt]){byType[dt].denom++;if(hasValid)byType[dt].pub++;}
+      eligible.push({...staff,validPaper:hasValid});
+    });
+    S.computed={eligible,published:eligible.filter(e=>e.validPaper).length,byType,deptMap:{}};
+  }catch(e){ console.warn('physician init error', e); }
 
   return {
     id: 'physician-paper',
@@ -3667,9 +3693,14 @@ async function startup(){
       wrapper.appendChild(document.importNode(tpl.content, true));
       container.innerHTML = '';
       container.appendChild(wrapper);
-      // 初始化論文系統
-      if (!_mounted) { loadFromStorage(); _mounted = true; }
-      else { recalc(); }
+      // 初始化論文系統（DOM 已就緒，可以安全 recalc）
+      if (!_mounted) {
+        _mounted = true;
+        // 資料已在 IIFE init 時載入，直接 recalc 渲染 DOM
+        setTimeout(()=>{ recalc(); autoLoadFromGDrive(); }, 100);
+      } else {
+        recalc();
+      }
     }
   };
 })();
