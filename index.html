@@ -3702,8 +3702,8 @@ async function startup(){
       wrapper.appendChild(document.importNode(tpl.content, true));
       container.innerHTML = '';
       container.appendChild(wrapper);
-      // DOM 已就緒，先用現有資料渲染，同時重新從 GDrive 載入最新
-      setTimeout(()=>{ recalc(); autoLoadFromGDrive(); }, 100);
+      // DOM 已就緒，直接用已載入的資料渲染（GDrive 資料在頁面載入時已自動讀取）
+      setTimeout(()=>{ recalc(); }, 100);
     }
   };
 })();
